@@ -6,6 +6,7 @@ import (
 
 	"github.com/vultisig/app-recurring/internal/mayachain"
 	"github.com/vultisig/app-recurring/internal/thorchain"
+	"github.com/vultisig/verifier/plugin"
 	"github.com/vultisig/vultisig-go/common"
 )
 
@@ -81,7 +82,10 @@ func ValidateAssetRoute(
 
 	cap, ok := chainRouteCapabilities[fromChain]
 	if !ok || cap.SameChainOnly {
-		return fmt.Errorf("no cross-chain providers for %s", fromChain)
+		return plugin.NewValidationError(
+			fmt.Errorf("no cross-chain providers for %s", fromChain),
+			"swap route not available",
+		)
 	}
 
 	var lastErr error
@@ -109,7 +113,13 @@ func ValidateAssetRoute(
 		if toAsset != "" {
 			assetDesc = toAsset
 		}
-		return fmt.Errorf("route %s → %s (%s): destination asset not available: %w", fromChain, toChain, assetDesc, lastErr)
+		return plugin.NewValidationError(
+			fmt.Errorf("route %s → %s (%s): destination asset not available: %w", fromChain, toChain, assetDesc, lastErr),
+			"swap route not available",
+		)
 	}
-	return fmt.Errorf("no provider supports %s → %s", fromChain, toChain)
+	return plugin.NewValidationError(
+		fmt.Errorf("no provider supports %s → %s", fromChain, toChain),
+		"swap route not available",
+	)
 }
