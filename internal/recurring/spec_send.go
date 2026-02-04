@@ -459,3 +459,11 @@ func (s *SendSpec) ValidatePluginPolicy(pol types.PluginPolicy) error {
 	}
 	return plugin.ValidatePluginPolicy(pol, spec)
 }
+
+func (s *SendSpec) GetPluginID() string {
+	return PluginRecurringSends
+}
+
+func (s *SendSpec) GetSkills() string {
+	return skillsSendMD
+}
