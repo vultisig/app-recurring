@@ -12,6 +12,7 @@ Automate token swaps on a schedule (DCA - Dollar Cost Averaging).
 Ethereum, Arbitrum, Avalanche, BNB Chain, Base, Blast, Optimism, Polygon, Bitcoin, Litecoin, Dogecoin, Bitcoin Cash, Dash, Solana, XRP, Zcash, Cosmos (Gaia), MayaChain, THORChain, Tron
 
 ## Parameters
+
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | from.chain | Yes | Source blockchain |
