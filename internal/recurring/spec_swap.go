@@ -467,3 +467,11 @@ func (s *SwapSpec) ValidatePluginPolicy(pol types.PluginPolicy) error {
 	}
 	return plugin.ValidatePluginPolicy(pol, spec)
 }
+
+func (s *SwapSpec) GetPluginID() string {
+	return PluginRecurringSwaps
+}
+
+func (s *SwapSpec) GetSkills() string {
+	return skillsSwapMD
+}
