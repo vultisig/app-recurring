@@ -27,7 +27,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/vultisig/mobile-tss-lib v0.0.0-20250316003201-2e7e570a4a74
 	github.com/vultisig/recipes v0.0.0-20260129020926-577976dfb292
-	github.com/vultisig/verifier v0.1.20-0.20260204141005-24aed4cbd2a9
+	github.com/vultisig/verifier v0.1.20-0.20260205142503-1bb1baabd89f
 	github.com/vultisig/vultisig-go v0.0.0-20260114092710-6c38516a0c85
 	github.com/xyield/xrpl-go v0.0.0-20230914223425-9abe75c05830
 	golang.org/x/crypto v0.45.0
@@ -265,6 +265,5 @@ replace (
 	github.com/agl/ed25519 => github.com/binance-chain/edwards25519 v0.0.0-20200305024217-f36fc4b53d43
 	github.com/cwespare/xxhash/v2 => github.com/cespare/xxhash/v2 v2.1.1
 	github.com/gogo/protobuf => github.com/gogo/protobuf v1.3.2
-	github.com/vultisig/verifier => ../verifier
 	nhooyr.io/websocket => github.com/coder/websocket v1.8.6
 )
