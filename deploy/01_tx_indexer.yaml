@@ -47,7 +47,7 @@ spec:
                 configMapKeyRef:
                   name: rpc
                   key: avalanche
-            - name: BASE_RPC_BSC_URL
+            - name: BASE_RPC_BSCCHAIN_URL
               valueFrom:
                 configMapKeyRef:
                   name: rpc
@@ -102,6 +102,11 @@ spec:
                 configMapKeyRef:
                   name: rpc
                   key: xrp
+            - name: BASE_RPC_SOLANA_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: rpc
+                  key: solana
             - name: BASE_INTERVAL
               value: "30s"
             - name: BASE_ITERATIONTIMEOUT
