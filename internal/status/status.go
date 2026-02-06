@@ -43,12 +43,12 @@ func (s *Status) WaitMined(ctx context.Context, txHash string) (rpc.TxOnChainSta
 
 			return "", fmt.Errorf("timeout waiting for transaction %s to be mined after %s", txHash, WaitMinedTimeout)
 		case <-ticker.C:
-			status, err := s.caller.GetTxStatus(ctx, txHash)
+			result, err := s.caller.GetTxStatus(ctx, txHash)
 			if err != nil {
 				return "", err
 			}
-			if status != rpc.TxOnChainPending {
-				return status, nil
+			if result.Status != rpc.TxOnChainPending {
+				return result.Status, nil
 			}
 		}
 	}
