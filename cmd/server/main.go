@@ -142,6 +142,9 @@ func main() {
 
 	if cfg.Verifier.Token != "" {
 		srv.SetAuthMiddleware(server.NewAuth(cfg.Verifier.Token).Middleware)
+		logger.Info("verifier auth enabled")
+	} else {
+		logger.Warn("verifier auth disabled")
 	}
 
 	go func() {
