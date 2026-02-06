@@ -11,6 +11,7 @@ import (
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	cosmostypes "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/types/bech32"
 	"github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -28,6 +29,17 @@ const (
 	// ThorBech32HRP is the Bech32 human-readable prefix for THORChain addresses
 	ThorBech32HRP = "thor"
 )
+
+func decodeThorAddress(addr string) (cosmostypes.AccAddress, error) {
+	hrp, bz, err := bech32.DecodeAndConvert(addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode bech32 address: %w", err)
+	}
+	if hrp != ThorBech32HRP {
+		return nil, fmt.Errorf("invalid bech32 prefix: expected %s, got %s", ThorBech32HRP, hrp)
+	}
+	return cosmostypes.AccAddress(bz), nil
+}
 
 // SendService handles building THORChain send transactions
 type SendService struct {
@@ -85,20 +97,19 @@ func (s *SendService) BuildTransferWithAccountInfo(
 	accountNumber uint64,
 	sequence uint64,
 ) ([]byte, []byte, error) {
-	// Parse addresses (THORChain uses "thor" prefix)
-	fromAddr, err := cosmostypes.AccAddressFromBech32(from)
-	if err != nil {
+	// Validate addresses (THORChain uses "thor" prefix)
+	if _, err := decodeThorAddress(from); err != nil {
 		return nil, nil, fmt.Errorf("rune: invalid from address: %w", err)
 	}
 
-	toAddr, err := cosmostypes.AccAddressFromBech32(to)
-	if err != nil {
+	if _, err := decodeThorAddress(to); err != nil {
 		return nil, nil, fmt.Errorf("rune: invalid to address: %w", err)
 	}
 
-	// Create send message
+	// Create send message using original string addresses to preserve "thor" bech32 prefix.
+	// NewMsgSend calls AccAddress.String() which re-encodes with the SDK global "cosmos" prefix.
 	amount := cosmostypes.NewCoins(cosmostypes.NewCoin(RuneDenom, math.NewIntFromUint64(amountRune)))
-	sendMsg := banktypes.NewMsgSend(fromAddr, toAddr, amount)
+	sendMsg := &banktypes.MsgSend{FromAddress: from, ToAddress: to, Amount: amount}
 
 	// Wrap message in Any
 	msgAny, err := codectypes.NewAnyWithValue(sendMsg)
