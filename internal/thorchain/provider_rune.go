@@ -337,18 +337,18 @@ func (p *ProviderRune) buildMsgSendTransaction(
 	sequence uint64,
 	memo string,
 ) ([]byte, []byte, error) {
-	fromAddr, err := decodeThorAddress(from)
-	if err != nil {
+	if _, err := decodeThorAddress(from); err != nil {
 		return nil, nil, fmt.Errorf("invalid from address: %w", err)
 	}
 
-	toAddr, err := decodeThorAddress(inboundAddress)
-	if err != nil {
+	if _, err := decodeThorAddress(inboundAddress); err != nil {
 		return nil, nil, fmt.Errorf("invalid inbound address: %w", err)
 	}
 
+	// Use original string addresses to preserve "thor" bech32 prefix.
+	// NewMsgSend calls AccAddress.String() which re-encodes with the SDK global "cosmos" prefix.
 	coins := cosmostypes.NewCoins(cosmostypes.NewCoin(rune_swap.RuneDenom, math.NewIntFromUint64(amountRune)))
-	sendMsg := banktypes.NewMsgSend(fromAddr, toAddr, coins)
+	sendMsg := &banktypes.MsgSend{FromAddress: from, ToAddress: inboundAddress, Amount: coins}
 
 	msgAny, err := codectypes.NewAnyWithValue(sendMsg)
 	if err != nil {
