@@ -11,6 +11,7 @@ import (
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	cosmostypes "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/types/bech32"
 	"github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -25,7 +26,20 @@ const (
 	MayaChainID = "mayachain-mainnet-v1"
 	// Denom for CACAO
 	CacaoDenom = "cacao"
+	// MayaBech32HRP is the Bech32 human-readable prefix for MayaChain addresses
+	MayaBech32HRP = "maya"
 )
+
+func decodeMayaAddress(addr string) (cosmostypes.AccAddress, error) {
+	hrp, bz, err := bech32.DecodeAndConvert(addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode bech32 address: %w", err)
+	}
+	if hrp != MayaBech32HRP {
+		return nil, fmt.Errorf("invalid bech32 prefix: expected %s, got %s", MayaBech32HRP, hrp)
+	}
+	return cosmostypes.AccAddress(bz), nil
+}
 
 // SendService handles building MayaChain send transactions
 type SendService struct {
@@ -83,20 +97,19 @@ func (s *SendService) BuildTransferWithAccountInfo(
 	accountNumber uint64,
 	sequence uint64,
 ) ([]byte, []byte, error) {
-	// Parse addresses (Maya uses same bech32 format as Cosmos)
-	fromAddr, err := cosmostypes.AccAddressFromBech32(from)
-	if err != nil {
+	// Validate addresses (MayaChain uses "maya" prefix)
+	if _, err := decodeMayaAddress(from); err != nil {
 		return nil, nil, fmt.Errorf("maya: invalid from address: %w", err)
 	}
 
-	toAddr, err := cosmostypes.AccAddressFromBech32(to)
-	if err != nil {
+	if _, err := decodeMayaAddress(to); err != nil {
 		return nil, nil, fmt.Errorf("maya: invalid to address: %w", err)
 	}
 
-	// Create send message
+	// Create send message using original string addresses to preserve "maya" bech32 prefix.
+	// NewMsgSend calls AccAddress.String() which re-encodes with the SDK global "cosmos" prefix.
 	coins := cosmostypes.NewCoins(cosmostypes.NewCoin(CacaoDenom, math.NewIntFromUint64(amount)))
-	sendMsg := banktypes.NewMsgSend(fromAddr, toAddr, coins)
+	sendMsg := &banktypes.MsgSend{FromAddress: from, ToAddress: to, Amount: coins}
 
 	// Wrap message in Any
 	msgAny, err := codectypes.NewAnyWithValue(sendMsg)

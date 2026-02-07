@@ -3,5 +3,5 @@ kind: ConfigMap
 metadata:
   name: mayachain
 data:
-  url: "https://mayanode.mayachain.info/mayachain"
+  url: "https://mayanode.mayachain.info"
 
