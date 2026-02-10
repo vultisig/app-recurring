@@ -47,13 +47,17 @@ func (p *Provider) validateSwap(from evm_swap.From, to evm_swap.To) error {
 	return nil
 }
 
-func (p *Provider) Quote(
+type resolvedSwap struct {
+	resp     *SwapResponse
+	toAmount *big.Int
+}
+
+func (p *Provider) resolveSwap(
 	ctx context.Context,
 	from evm_swap.From,
 	to evm_swap.To,
-) (*evm_swap.QuoteResult, error) {
-	err := p.validateSwap(from, to)
-	if err != nil {
+) (*resolvedSwap, error) {
+	if err := p.validateSwap(from, to); err != nil {
 		return nil, fmt.Errorf("invalid swap: %w", err)
 	}
 
@@ -85,13 +89,29 @@ func (p *Provider) Quote(
 		return nil, fmt.Errorf("failed to parse toAmount: %s", swapResp.DstAmount)
 	}
 
+	return &resolvedSwap{
+		resp:     swapResp,
+		toAmount: toAmount,
+	}, nil
+}
+
+func (p *Provider) Quote(
+	ctx context.Context,
+	from evm_swap.From,
+	to evm_swap.To,
+) (*evm_swap.QuoteResult, error) {
+	rs, err := p.resolveSwap(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+
 	spenderAddr, err := p.client.GetSpender(ctx, from.Chain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get spender: %w", err)
 	}
 
 	return &evm_swap.QuoteResult{
-		AmountOut: toAmount,
+		AmountOut: rs.toAmount,
 		Spender:   ecommon.HexToAddress(spenderAddr),
 	}, nil
 }
@@ -101,50 +121,22 @@ func (p *Provider) MakeTx(
 	from evm_swap.From,
 	to evm_swap.To,
 ) (*big.Int, []byte, error) {
-	err := p.validateSwap(from, to)
+	rs, err := p.resolveSwap(ctx, from, to)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid swap: %w", err)
+		return nil, nil, err
 	}
 
-	srcToken := from.AssetID.Hex()
-	if bytes.Equal(from.AssetID.Bytes(), evm.ZeroAddress.Bytes()) {
-		srcToken = NativeTokenAddress
-	}
-
-	dstToken := to.AssetID
-	if to.AssetID == "" {
-		dstToken = NativeTokenAddress
-	}
-
-	swapResp, err := p.client.GetSwap(ctx, swapRequest{
-		Chain:        from.Chain,
-		Src:          srcToken,
-		Dst:          dstToken,
-		Amount:       from.Amount.String(),
-		From:         from.Address.Hex(),
-		Receiver:     to.Address,
-		SlippagePerc: DefaultSlippagePercent,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get swap from 1inch: %w", err)
-	}
-
-	toAmount, ok := new(big.Int).SetString(swapResp.DstAmount, 10)
+	txValue, ok := new(big.Int).SetString(rs.resp.Tx.Value, 10)
 	if !ok {
-		return nil, nil, fmt.Errorf("failed to parse toAmount: %s", swapResp.DstAmount)
+		return nil, nil, fmt.Errorf("failed to parse tx value: %s", rs.resp.Tx.Value)
 	}
 
-	txValue, ok := new(big.Int).SetString(swapResp.Tx.Value, 10)
-	if !ok {
-		return nil, nil, fmt.Errorf("failed to parse tx value: %s", swapResp.Tx.Value)
-	}
-
-	txData, err := hexutil.Decode(swapResp.Tx.Data)
+	txData, err := hexutil.Decode(rs.resp.Tx.Data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to decode tx data: %w", err)
 	}
 
-	routerAddr := ecommon.HexToAddress(swapResp.Tx.To)
+	routerAddr := ecommon.HexToAddress(rs.resp.Tx.To)
 
 	unsignedTx, err := p.sdk.MakeTx(
 		ctx,
@@ -158,5 +150,5 @@ func (p *Provider) MakeTx(
 		return nil, nil, fmt.Errorf("failed to build unsigned tx: %w", err)
 	}
 
-	return toAmount, unsignedTx, nil
+	return rs.toAmount, unsignedTx, nil
 }
