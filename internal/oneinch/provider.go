@@ -47,6 +47,55 @@ func (p *Provider) validateSwap(from evm_swap.From, to evm_swap.To) error {
 	return nil
 }
 
+func (p *Provider) Quote(
+	ctx context.Context,
+	from evm_swap.From,
+	to evm_swap.To,
+) (*evm_swap.QuoteResult, error) {
+	err := p.validateSwap(from, to)
+	if err != nil {
+		return nil, fmt.Errorf("invalid swap: %w", err)
+	}
+
+	srcToken := from.AssetID.Hex()
+	if bytes.Equal(from.AssetID.Bytes(), evm.ZeroAddress.Bytes()) {
+		srcToken = NativeTokenAddress
+	}
+
+	dstToken := to.AssetID
+	if to.AssetID == "" {
+		dstToken = NativeTokenAddress
+	}
+
+	swapResp, err := p.client.GetSwap(ctx, swapRequest{
+		Chain:        from.Chain,
+		Src:          srcToken,
+		Dst:          dstToken,
+		Amount:       from.Amount.String(),
+		From:         from.Address.Hex(),
+		Receiver:     to.Address,
+		SlippagePerc: DefaultSlippagePercent,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get swap from 1inch: %w", err)
+	}
+
+	toAmount, ok := new(big.Int).SetString(swapResp.DstAmount, 10)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse toAmount: %s", swapResp.DstAmount)
+	}
+
+	spenderAddr, err := p.client.GetSpender(ctx, from.Chain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get spender: %w", err)
+	}
+
+	return &evm_swap.QuoteResult{
+		AmountOut: toAmount,
+		Spender:   ecommon.HexToAddress(spenderAddr),
+	}, nil
+}
+
 func (p *Provider) MakeTx(
 	ctx context.Context,
 	from evm_swap.From,

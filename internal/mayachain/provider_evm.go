@@ -106,6 +106,106 @@ func convertDecimals(amount *big.Int, originalDecimals, desiredDecimals uint8) (
 	return convertedAmount, exactAmount
 }
 
+func (p *ProviderEvm) Quote(
+	ctx context.Context,
+	from evm_swap.From,
+	to evm_swap.To,
+) (*evm_swap.QuoteResult, error) {
+	if err := p.validateEvm(from, to); err != nil {
+		return nil, fmt.Errorf("invalid swap: %w", err)
+	}
+
+	fromMayaNet, err := parseMayaNetwork(from.Chain)
+	if err != nil {
+		return nil, fmt.Errorf("unsupported from chain: %w", err)
+	}
+
+	var fromAsset string
+	if bytes.Equal(from.AssetID.Bytes(), evm.ZeroAddress.Bytes()) {
+		nativeSymbol, er := from.Chain.NativeSymbol()
+		if er != nil {
+			return nil, fmt.Errorf("failed to get native symbol: %w", er)
+		}
+		fromAsset = string(fromMayaNet) + "." + nativeSymbol
+	} else {
+		fromAsset, err = p.makeMayaAsset(ctx, from.Chain, from.AssetID.Hex())
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve from asset: %w", err)
+		}
+	}
+
+	tokenDecimals, err := p.getTokenDecimals(ctx, from.AssetID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get token decimals: %w", err)
+	}
+
+	mayaAmount, exactAmount := convertDecimals(from.Amount, tokenDecimals, 8)
+
+	toAsset, err := MakeMayaAsset(ctx, p.client, to.Chain, to.AssetID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve to asset: %w", err)
+	}
+
+	quote, err := p.client.GetQuote(ctx, QuoteSwapRequest{
+		FromAsset:         fromAsset,
+		ToAsset:           toAsset,
+		Amount:            mayaAmount.String(),
+		Destination:       to.Address,
+		StreamingInterval: DefaultStreamingInterval,
+		StreamingQuantity: DefaultStreamingQuantity,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get quote: %w", err)
+	}
+
+	var dustThreshold uint64
+	if quote.DustThreshold != "" {
+		dustThreshold, err = strconv.ParseUint(quote.DustThreshold, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse dust threshold: %w", err)
+		}
+	}
+
+	if mayaAmount.Uint64() < dustThreshold {
+		return nil, fmt.Errorf(
+			"amount %s (8-decimal: %s, exact: %s) below dust threshold %d",
+			from.Amount.String(),
+			mayaAmount.String(),
+			exactAmount.String(),
+			dustThreshold,
+		)
+	}
+
+	routerAddr := common.HexToAddress(quote.Router)
+
+	expectedOut, ok := new(big.Int).SetString(quote.ExpectedAmountOut, 10)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse expected amount out: %s", quote.ExpectedAmountOut)
+	}
+
+	targetTokenAddr := common.HexToAddress(to.AssetID)
+	var targetDecimals uint8
+	if bytes.Equal(targetTokenAddr.Bytes(), evm.ZeroAddress.Bytes()) {
+		targetDecimals = 18
+	} else {
+		targetRpc, err := p.getTargetChainRpc(to.Chain.String())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get target chain RPC: %w", err)
+		}
+		targetDecimals, err = p.getTokenDecimalsWithRpc(ctx, targetRpc, targetTokenAddr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get target token decimals: %w", err)
+		}
+	}
+
+	realExpectedOut, _ := convertDecimals(expectedOut, 8, targetDecimals)
+
+	return &evm_swap.QuoteResult{
+		AmountOut: realExpectedOut,
+		Spender:   routerAddr,
+	}, nil
+}
+
 func (p *ProviderEvm) MakeTx(
 	ctx context.Context,
 	from evm_swap.From,
