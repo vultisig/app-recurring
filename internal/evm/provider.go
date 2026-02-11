@@ -22,8 +22,18 @@ type To struct {
 	Address string
 }
 
+type QuoteResult struct {
+	AmountOut *big.Int
+	Spender   ecommon.Address
+}
+
 type Provider interface {
 	Name() string
+	Quote(
+		ctx context.Context,
+		from From,
+		to To,
+	) (*QuoteResult, error)
 	MakeTx(
 		ctx context.Context,
 		from From,
