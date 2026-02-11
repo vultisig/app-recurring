@@ -37,20 +37,6 @@ func (p *ProviderEvm) Name() string {
 	return "mayachain"
 }
 
-func (p *ProviderEvm) validateEvm(from evm_swap.From, to evm_swap.To) error {
-	_, err := parseMayaNetwork(from.Chain)
-	if err != nil {
-		return fmt.Errorf("unsupported 'from' chain: %w", err)
-	}
-
-	_, err = parseMayaNetwork(to.Chain)
-	if err != nil {
-		return fmt.Errorf("unsupported 'to' chain: %w", err)
-	}
-
-	return nil
-}
-
 func (p *ProviderEvm) getTokenDecimals(ctx context.Context, tokenAddress common.Address) (uint8, error) {
 	return p.getTokenDecimalsWithRpc(ctx, p.rpc, tokenAddress)
 }
@@ -117,13 +103,13 @@ func (p *ProviderEvm) resolveQuote(
 	from evm_swap.From,
 	to evm_swap.To,
 ) (*resolvedQuote, error) {
-	if err := p.validateEvm(from, to); err != nil {
-		return nil, fmt.Errorf("invalid swap: %w", err)
-	}
-
 	fromMayaNet, err := parseMayaNetwork(from.Chain)
 	if err != nil {
-		return nil, fmt.Errorf("unsupported from chain: %w", err)
+		return nil, fmt.Errorf("unsupported 'from' chain: %w", err)
+	}
+
+	if _, err := parseMayaNetwork(to.Chain); err != nil {
+		return nil, fmt.Errorf("unsupported 'to' chain: %w", err)
 	}
 
 	var fromAsset string
