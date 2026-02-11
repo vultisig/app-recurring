@@ -32,11 +32,8 @@ import (
 	"github.com/vultisig/app-recurring/internal/xrp"
 	"github.com/vultisig/app-recurring/internal/zcash"
 	"github.com/vultisig/mobile-tss-lib/tss"
-	"github.com/vultisig/recipes/metarule"
-	"github.com/vultisig/recipes/resolver"
 	btcsdk "github.com/vultisig/recipes/sdk/btc"
 	evmsdk "github.com/vultisig/recipes/sdk/evm"
-	rtypes "github.com/vultisig/recipes/types"
 	"github.com/vultisig/verifier/plugin/policy"
 	"github.com/vultisig/verifier/plugin/scheduler"
 	"github.com/vultisig/verifier/plugin/tx_indexer/pkg/rpc"
@@ -526,7 +523,6 @@ func (c *Consumer) handle(ctx context.Context, t *asynq.Task) error {
 	err = c.handleEvmSwap(
 		ctx,
 		pol,
-		recipe,
 		trigger,
 		pcfg.ToAssetMap,
 		pcfg.FromChain,
@@ -1093,7 +1089,6 @@ func (c *Consumer) sendToSolanaRecipient(
 func (c *Consumer) handleEvmSwap(
 	ctx context.Context,
 	pol *types.PluginPolicy,
-	recipe *rtypes.Policy,
 	trigger scheduler.Scheduler,
 	toAssetMap map[string]any,
 	fromChain common.Chain,
@@ -1133,14 +1128,28 @@ func (c *Consumer) handleEvmSwap(
 		return fmt.Errorf("insufficient balance: have %s, need %s", balance.String(), fromAmountTyped.String())
 	}
 
-	spender, err := findSpender(fromChain, recipe.GetRules())
+	from := evm.From{
+		Amount:  fromAmountTyped,
+		Chain:   fromChain,
+		AssetID: fromAssetTyped,
+		Address: fromAddressTyped,
+	}
+	to := evm.To{
+		Chain:   toChainTyped,
+		AssetID: toAsset,
+		Address: toAddress,
+	}
+
+	// Find the best quote across all providers (API-only, no tx building)
+	winner, err := network.Swap.FindBestQuote(ctx, from, to)
 	if err != nil {
-		return fmt.Errorf("failed to find approve rule: %w", err)
+		return fmt.Errorf("failed to find best quote: %w", err)
 	}
 
 	l := c.logger.WithFields(logrus.Fields{
 		"policyID":   trigger.PolicyID.String(),
-		"spender":    spender.String(),
+		"provider":   winner.Provider.Name(),
+		"spender":    winner.Quote.Spender.Hex(),
 		"fromChain":  fromChain.String(),
 		"fromAsset":  fromAssetTyped.String(),
 		"fromAmount": fromAmountTyped.String(),
@@ -1149,11 +1158,12 @@ func (c *Consumer) handleEvmSwap(
 		"toAddress":  toAddress,
 	})
 
+	// Approve the winning provider's spender
 	shouldApprove, approveTx, err := network.Approve.CheckAllowance(
 		ctx,
 		fromAssetTyped,
 		fromAddressTyped,
-		spender,
+		winner.Quote.Spender,
 		fromAmountTyped,
 	)
 	if err != nil {
@@ -1185,20 +1195,8 @@ func (c *Consumer) handleEvmSwap(
 		}
 	}
 
-	swapTx, err := network.Swap.FindBestAmountOut(
-		ctx,
-		evm.From{
-			Amount:  fromAmountTyped,
-			Chain:   fromChain,
-			AssetID: fromAssetTyped,
-			Address: fromAddressTyped,
-		},
-		evm.To{
-			Chain:   toChainTyped,
-			AssetID: toAsset,
-			Address: toAddress,
-		},
-	)
+	// Build the actual swap tx using only the winning provider
+	_, swapTx, err := winner.Provider.MakeTx(ctx, from, to)
 	if err != nil {
 		return fmt.Errorf("failed to build swap tx: %w", err)
 	}
@@ -1349,42 +1347,6 @@ func (c *Consumer) sendToEvmRecipient(
 	return nil
 }
 
-func findSpender(chain common.Chain, rawRules []*rtypes.Rule) (ecommon.Address, error) {
-	for _, rawRule := range rawRules {
-		rules, err := metarule.NewMetaRule().TryFormat(rawRule)
-		if err != nil {
-			return ecommon.Address{}, fmt.Errorf("failed to parse rule: %w", err)
-		}
-
-		for _, rule := range rules {
-			if rule.GetTarget().GetTargetType() == rtypes.TargetType_TARGET_TYPE_MAGIC_CONSTANT {
-				c := rule.GetTarget().GetMagicConstant()
-
-				resolve, er := resolver.NewMagicConstantRegistry().GetResolver(c)
-				if er != nil {
-					return ecommon.Address{}, fmt.Errorf(
-						"failed to get resolver (%s): %w",
-						rule.GetTarget().GetMagicConstant(),
-						er,
-					)
-				}
-
-				router, _, er := resolve.Resolve(c, chain.String(), "")
-				if er != nil {
-					return ecommon.Address{}, fmt.Errorf(
-						"failed to resolve magic constant (%s): %w",
-						rule.GetTarget().GetMagicConstant(),
-						er,
-					)
-				}
-				return ecommon.HexToAddress(router), nil
-			}
-
-			return ecommon.HexToAddress(rule.GetTarget().GetAddress()), nil
-		}
-	}
-	return ecommon.Address{}, fmt.Errorf("rule not found")
-}
 
 func (c *Consumer) zcashPubToAddress(rootPub string, pluginID string) (string, []byte, error) {
 	vaultContent, err := c.vault.GetVault(common.GetVaultBackupFilename(rootPub, pluginID))

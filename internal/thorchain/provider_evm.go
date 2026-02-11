@@ -36,20 +36,6 @@ func (p *ProviderEvm) Name() string {
 	return "thorchain"
 }
 
-func (p *ProviderEvm) validateEvm(from evm_swap.From, to evm_swap.To) error {
-	_, err := parseThorNetwork(from.Chain)
-	if err != nil {
-		return fmt.Errorf("unsupported 'from' chain: %w", err)
-	}
-
-	_, err = parseThorNetwork(to.Chain)
-	if err != nil {
-		return fmt.Errorf("unsupported 'to' chain: %w", err)
-	}
-
-	return nil
-}
-
 func (p *ProviderEvm) getTokenDecimals(ctx context.Context, tokenAddress common.Address) (uint8, error) {
 	return p.getTokenDecimalsWithRpc(ctx, p.rpc, tokenAddress)
 }
@@ -108,44 +94,50 @@ func convertDecimals(amount *big.Int, originalDecimals, desiredDecimals uint8) (
 	return convertedAmount, exactAmount
 }
 
-func (p *ProviderEvm) MakeTx(
+type resolvedQuote struct {
+	quote       quoteSwapResponse
+	routerAddr  common.Address
+	exactAmount *big.Int
+}
+
+func (p *ProviderEvm) resolveQuote(
 	ctx context.Context,
 	from evm_swap.From,
 	to evm_swap.To,
-) (*big.Int, []byte, error) {
-	if err := p.validateEvm(from, to); err != nil {
-		return nil, nil, fmt.Errorf("invalid swap: %w", err)
-	}
-
+) (*resolvedQuote, error) {
 	fromThorNet, err := parseThorNetwork(from.Chain)
 	if err != nil {
-		return nil, nil, fmt.Errorf("unsupported from chain: %w", err)
+		return nil, fmt.Errorf("unsupported 'from' chain: %w", err)
+	}
+
+	if _, err := parseThorNetwork(to.Chain); err != nil {
+		return nil, fmt.Errorf("unsupported 'to' chain: %w", err)
 	}
 
 	var fromAsset string
 	if bytes.Equal(from.AssetID.Bytes(), evm.ZeroAddress.Bytes()) {
 		nativeSymbol, er := from.Chain.NativeSymbol()
 		if er != nil {
-			return nil, nil, fmt.Errorf("failed to get native symbol: %w", er)
+			return nil, fmt.Errorf("failed to get native symbol: %w", er)
 		}
 		fromAsset = string(fromThorNet) + "." + nativeSymbol
 	} else {
 		fromAsset, err = makeThorAsset(ctx, p.client, from.Chain, from.AssetID.Hex())
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to resolve from asset: %w", err)
+			return nil, fmt.Errorf("failed to resolve from asset: %w", err)
 		}
 	}
 
 	tokenDecimals, err := p.getTokenDecimals(ctx, from.AssetID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get token decimals: %w", err)
+		return nil, fmt.Errorf("failed to get token decimals: %w", err)
 	}
 
 	thorAmount, exactAmount := convertDecimals(from.Amount, tokenDecimals, 8)
 
 	toAsset, err := makeThorAsset(ctx, p.client, to.Chain, to.AssetID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to resolve to asset: %w", err)
+		return nil, fmt.Errorf("failed to resolve to asset: %w", err)
 	}
 
 	quote, err := p.client.getQuote(ctx, quoteSwapRequest{
@@ -158,16 +150,16 @@ func (p *ProviderEvm) MakeTx(
 		ToleranceBps:      defaultToleranceBps,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get quote: %w", err)
+		return nil, fmt.Errorf("failed to get quote: %w", err)
 	}
 
 	dustThreshold, err := strconv.ParseUint(quote.DustThreshold, 10, 64)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse dust threshold: %w", err)
+		return nil, fmt.Errorf("failed to parse dust threshold: %w", err)
 	}
 
 	if thorAmount.Uint64() < dustThreshold {
-		return nil, nil, fmt.Errorf(
+		return nil, fmt.Errorf(
 			"amount %s (8-decimal: %s, exact: %s) below dust threshold %d",
 			from.Amount.String(),
 			thorAmount.String(),
@@ -176,13 +168,79 @@ func (p *ProviderEvm) MakeTx(
 		)
 	}
 
+	return &resolvedQuote{
+		quote:       quote,
+		routerAddr:  common.HexToAddress(quote.Router),
+		exactAmount: exactAmount,
+	}, nil
+}
+
+func (p *ProviderEvm) convertExpectedOut(
+	ctx context.Context,
+	expectedAmountOut string,
+	to evm_swap.To,
+) (*big.Int, error) {
+	expectedOut, ok := new(big.Int).SetString(expectedAmountOut, 10)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse expected amount out: %s", expectedAmountOut)
+	}
+
+	targetTokenAddr := common.HexToAddress(to.AssetID)
+	var targetDecimals uint8
+	if bytes.Equal(targetTokenAddr.Bytes(), evm.ZeroAddress.Bytes()) {
+		targetDecimals = 18
+	} else {
+		targetRpc, err := p.getTargetChainRpc(to.Chain.String())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get target chain RPC: %w", err)
+		}
+		targetDecimals, err = p.getTokenDecimalsWithRpc(ctx, targetRpc, targetTokenAddr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get target token decimals: %w", err)
+		}
+	}
+
+	realExpectedOut, _ := convertDecimals(expectedOut, 8, targetDecimals)
+	return realExpectedOut, nil
+}
+
+func (p *ProviderEvm) Quote(
+	ctx context.Context,
+	from evm_swap.From,
+	to evm_swap.To,
+) (*evm_swap.QuoteResult, error) {
+	rq, err := p.resolveQuote(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	amountOut, err := p.convertExpectedOut(ctx, rq.quote.ExpectedAmountOut, to)
+	if err != nil {
+		return nil, err
+	}
+
+	return &evm_swap.QuoteResult{
+		AmountOut: amountOut,
+		Spender:   rq.routerAddr,
+	}, nil
+}
+
+func (p *ProviderEvm) MakeTx(
+	ctx context.Context,
+	from evm_swap.From,
+	to evm_swap.To,
+) (*big.Int, []byte, error) {
+	rq, err := p.resolveQuote(ctx, from, to)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	router := thorchain_router.NewThorchainRouter()
-	routerAddr := common.HexToAddress(quote.Router)
-	vaultAddr := common.HexToAddress(quote.InboundAddress)
+	vaultAddr := common.HexToAddress(rq.quote.InboundAddress)
 
 	var expiry *big.Int
-	if quote.Expiry > 0 {
-		expiry = big.NewInt(quote.Expiry)
+	if rq.quote.Expiry > 0 {
+		expiry = big.NewInt(rq.quote.Expiry)
 	} else {
 		expiry = big.NewInt(time.Now().Unix() + 3600)
 	}
@@ -194,16 +252,16 @@ func (p *ProviderEvm) MakeTx(
 			vaultAddr,
 			evm.ZeroAddress,
 			big.NewInt(0),
-			quote.Memo,
+			rq.quote.Memo,
 			expiry,
 		)
-		value = exactAmount
+		value = rq.exactAmount
 	} else {
 		data = router.PackDepositWithExpiry(
 			vaultAddr,
 			from.AssetID,
-			exactAmount,
-			quote.Memo,
+			rq.exactAmount,
+			rq.quote.Memo,
 			expiry,
 		)
 		value = big.NewInt(0)
@@ -212,7 +270,7 @@ func (p *ProviderEvm) MakeTx(
 	unsignedTx, err := p.sdk.MakeTx(
 		ctx,
 		from.Address,
-		routerAddr,
+		rq.routerAddr,
 		value,
 		data,
 		0, // nonceOffset: swaps don't need offset
@@ -221,27 +279,10 @@ func (p *ProviderEvm) MakeTx(
 		return nil, nil, fmt.Errorf("failed to build tx: %w", err)
 	}
 
-	expectedOut, ok := new(big.Int).SetString(quote.ExpectedAmountOut, 10)
-	if !ok {
-		return nil, nil, fmt.Errorf("failed to parse expected amount out: %s", quote.ExpectedAmountOut)
+	amountOut, err := p.convertExpectedOut(ctx, rq.quote.ExpectedAmountOut, to)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	targetTokenAddr := common.HexToAddress(to.AssetID)
-	var targetDecimals uint8
-	if bytes.Equal(targetTokenAddr.Bytes(), evm.ZeroAddress.Bytes()) {
-		targetDecimals = 18
-	} else {
-		targetRpc, err := p.getTargetChainRpc(to.Chain.String())
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get target chain RPC: %w", err)
-		}
-		targetDecimals, err = p.getTokenDecimalsWithRpc(ctx, targetRpc, targetTokenAddr)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get target token decimals: %w", err)
-		}
-	}
-
-	realExpectedOut, _ := convertDecimals(expectedOut, 8, targetDecimals)
-
-	return realExpectedOut, unsignedTx, nil
+	return amountOut, unsignedTx, nil
 }
