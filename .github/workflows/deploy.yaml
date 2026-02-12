@@ -1,4 +1,4 @@
-name: Build and Deploy
+name: Build and Push Images
 
 on:
   release:
@@ -7,7 +7,6 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  CLUSTER: plugins-prod-k8s
   NS: plugin-dca
 
 jobs:
@@ -76,48 +75,37 @@ jobs:
           gh api -X PATCH "/orgs/${owner}/packages/container/${repo}%2Fworker/visibility" -f visibility=public || true
           gh api -X PATCH "/orgs/${owner}/packages/container/${repo}%2Ftx_indexer/visibility" -f visibility=public || true
 
-  deploy:
+  update-manifests:
     needs: [build-server, build-scheduler, build-worker, build-tx-indexer, set-public]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
         with:
-          token: ${{ secrets.DIGITALOCEAN_CI_TOKEN }}
+          ref: main
 
-      - name: Save DigitalOcean kubeconfig
-        run: doctl kubernetes cluster kubeconfig save ${{ env.CLUSTER }}
-
-      - name: Update deployment files
+      - name: Update deployment files with new image tags
         run: |
           TAG="${{ github.event.release.tag_name }}"
 
-          sed -i "s|image: busybox|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/server:${TAG}|" deploy/base/server/server.yaml
+          sed -i "s|image: ghcr.io/${{ env.IMAGE_NAME }}/server:.*|image: ghcr.io/${{ env.IMAGE_NAME }}/server:${TAG}|" deploy/base/server/server.yaml
+          sed -i "s|image: busybox|image: ghcr.io/${{ env.IMAGE_NAME }}/server:${TAG}|" deploy/base/server/server.yaml
 
-          sed -i "s|image: busybox|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/scheduler:${TAG}|" deploy/01_scheduler.yaml
-          sed -i "s|image: busybox|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/worker:${TAG}|" deploy/01_worker.yaml
-          sed -i "s|image: busybox|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/tx_indexer:${TAG}|" deploy/01_tx_indexer.yaml
+          sed -i "s|image: ghcr.io/${{ env.IMAGE_NAME }}/scheduler:.*|image: ghcr.io/${{ env.IMAGE_NAME }}/scheduler:${TAG}|" deploy/01_scheduler.yaml
+          sed -i "s|image: busybox|image: ghcr.io/${{ env.IMAGE_NAME }}/scheduler:${TAG}|" deploy/01_scheduler.yaml
 
-      - name: Deploy to Kubernetes
+          sed -i "s|image: ghcr.io/${{ env.IMAGE_NAME }}/worker:.*|image: ghcr.io/${{ env.IMAGE_NAME }}/worker:${TAG}|" deploy/01_worker.yaml
+          sed -i "s|image: busybox|image: ghcr.io/${{ env.IMAGE_NAME }}/worker:${TAG}|" deploy/01_worker.yaml
+
+          sed -i "s|image: ghcr.io/${{ env.IMAGE_NAME }}/tx_indexer:.*|image: ghcr.io/${{ env.IMAGE_NAME }}/tx_indexer:${TAG}|" deploy/01_tx_indexer.yaml
+          sed -i "s|image: busybox|image: ghcr.io/${{ env.IMAGE_NAME }}/tx_indexer:${TAG}|" deploy/01_tx_indexer.yaml
+
+      - name: Commit and push updated manifests
         run: |
-          kubectl -n ${{ env.NS }} apply -f deploy/prod
-
-          kubectl -n ${{ env.NS }} apply -k deploy/overlays/send
-          kubectl -n ${{ env.NS }} apply -k deploy/overlays/swap
-
-          kubectl -n ${{ env.NS }} apply -f deploy/01_scheduler.yaml
-          kubectl -n ${{ env.NS }} apply -f deploy/01_worker.yaml
-          kubectl -n ${{ env.NS }} apply -f deploy/01_tx_indexer.yaml
-
-          kubectl -n ${{ env.NS }} apply -f deploy/02_grafana_dashboard.yaml
-
-          kubectl -n ${{ env.NS }} rollout status deployment/server-send --timeout=300s
-          kubectl -n ${{ env.NS }} rollout status deployment/server-swap --timeout=300s
-          kubectl -n ${{ env.NS }} rollout status deployment/scheduler --timeout=300s
-          kubectl -n ${{ env.NS }} rollout status deployment/worker --timeout=300s
-          kubectl -n ${{ env.NS }} rollout status deployment/tx-indexer --timeout=300s
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deploy/
+          git commit -m "chore: update image tags to ${{ github.event.release.tag_name }}" || echo "No changes to commit"
+          git push origin main
