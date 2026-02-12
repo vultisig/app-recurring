@@ -32,6 +32,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	
 	cfg, err := newConfig()
 	if err != nil {
 		logrus.Fatalf("failed to load config: %v", err)
