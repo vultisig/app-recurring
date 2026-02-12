@@ -38,7 +38,7 @@ spec:
         - name: ghcr
       containers:
         - name: server
-          image: busybox
+          image: ghcr.io/vultisig/app-recurring/server:v1.0.91
           command: ["/app/main"]
           ports:
             - containerPort: 80
