@@ -7,6 +7,10 @@ on:
     paths-ignore:
       - '**.md'
       - '.gitignore'
+  workflow_run:
+    workflows: ["Sync main to dev"]
+    types:
+      - completed
 
 env:
   REGISTRY: ghcr.io
@@ -15,6 +19,9 @@ env:
 
 jobs:
   build-server:
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     uses: ./.github/workflows/build-push-image.yaml
     permissions:
       contents: read
@@ -23,10 +30,13 @@ jobs:
       service: server
       registry: ghcr.io
       image_name: ${{ github.repository }}
-      tag: dev-${{ github.sha }}
+      tag: dev-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       additional_tag: dev-latest
 
   build-scheduler:
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     uses: ./.github/workflows/build-push-image.yaml
     permissions:
       contents: read
@@ -35,10 +45,13 @@ jobs:
       service: scheduler
       registry: ghcr.io
       image_name: ${{ github.repository }}
-      tag: dev-${{ github.sha }}
+      tag: dev-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       additional_tag: dev-latest
 
   build-worker:
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     uses: ./.github/workflows/build-push-image.yaml
     permissions:
       contents: read
@@ -47,10 +60,13 @@ jobs:
       service: worker
       registry: ghcr.io
       image_name: ${{ github.repository }}
-      tag: dev-${{ github.sha }}
+      tag: dev-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       additional_tag: dev-latest
 
   build-tx-indexer:
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     uses: ./.github/workflows/build-push-image.yaml
     permissions:
       contents: read
@@ -59,7 +75,7 @@ jobs:
       service: tx_indexer
       registry: ghcr.io
       image_name: ${{ github.repository }}
-      tag: dev-${{ github.sha }}
+      tag: dev-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       additional_tag: dev-latest
 
   deploy:
@@ -70,6 +86,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && 'dev' || github.ref }}
 
       - name: Set up kubeconfig
         run: |
@@ -79,7 +97,7 @@ jobs:
 
       - name: Update deployment files
         run: |
-          TAG="dev-${{ github.sha }}"
+          TAG="dev-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}"
 
           sed -i "s|image: busybox|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/server:${TAG}|" deploy/base/server/server.yaml
 
