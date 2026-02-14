@@ -24,7 +24,7 @@ spec:
         - name: ghcr
       containers:
         - name: scheduler
-          image: busybox
+          image: ghcr.io/vultisig/app-recurring/scheduler:v1.0.91
           command: ["/app/main"]
           ports:
             - containerPort: 80
