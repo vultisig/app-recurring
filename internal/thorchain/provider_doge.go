@@ -27,13 +27,17 @@ var DogeMainNetParams = chaincfg.Params{
 
 // ProviderDoge implements FeeProvider and SwapProvider for Dogecoin via THORChain.
 type ProviderDoge struct {
-	client *Client
+	client       *Client
+	affiliateID  string
+	affiliateBps string
 }
 
 // NewProviderDoge creates a new Dogecoin provider for THORChain swaps.
-func NewProviderDoge(client *Client) *ProviderDoge {
+func NewProviderDoge(client *Client, affiliateID, affiliateBps string) *ProviderDoge {
 	return &ProviderDoge{
-		client: client,
+		client:       client,
+		affiliateID:  affiliateID,
+		affiliateBps: affiliateBps,
 	}
 }
 
@@ -96,6 +100,8 @@ func (p *ProviderDoge) MakeOutputs(
 		Destination:       to.Address,
 		StreamingInterval: defaultStreamingInterval,
 		StreamingQuantity: defaultStreamingQuantity,
+		Affiliate:         p.affiliateID,
+		AffiliateBps:      p.affiliateBps,
 	})
 	if err != nil {
 		return 0, nil, fmt.Errorf("[DOGE] failed to get quote: %w", err)
@@ -149,4 +155,3 @@ func (p *ProviderDoge) MakeOutputs(
 
 	return expectedOut, outputs, nil
 }
-

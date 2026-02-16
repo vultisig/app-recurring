@@ -37,21 +37,25 @@ func decodeThorAddress(addr string) (cosmostypes.AccAddress, error) {
 // ProviderRune implements the rune.SwapProvider interface for THORChain swaps from RUNE
 // with Maya fallback for chains not supported by THORChain (ARB, ZEC, DASH)
 type ProviderRune struct {
-	thorClient *Client
-	mayaClient *mayachain.Client
-	cdc        codec.Codec
+	thorClient   *Client
+	mayaClient   *mayachain.Client
+	cdc          codec.Codec
+	affiliateID  string
+	affiliateBps string
 }
 
 // NewProviderRune creates a new THORChain provider for RUNE swaps with Maya fallback
-func NewProviderRune(thorClient *Client, mayaClient *mayachain.Client) *ProviderRune {
+func NewProviderRune(thorClient *Client, mayaClient *mayachain.Client, affiliateID, affiliateBps string) *ProviderRune {
 	ir := codectypes.NewInterfaceRegistry()
 	cryptocodec.RegisterInterfaces(ir)
 	banktypes.RegisterInterfaces(ir)
 
 	return &ProviderRune{
-		thorClient: thorClient,
-		mayaClient: mayaClient,
-		cdc:        codec.NewProtoCodec(ir),
+		thorClient:   thorClient,
+		mayaClient:   mayaClient,
+		cdc:          codec.NewProtoCodec(ir),
+		affiliateID:  affiliateID,
+		affiliateBps: affiliateBps,
 	}
 }
 
@@ -108,6 +112,8 @@ func (p *ProviderRune) makeTransactionViaThorchain(
 		StreamingInterval: defaultStreamingInterval,
 		StreamingQuantity: defaultStreamingQuantity,
 		ToleranceBps:      defaultToleranceBps,
+		Affiliate:         p.affiliateID,
+		AffiliateBps:      p.affiliateBps,
 	})
 	if err != nil {
 		return nil, nil, 0, fmt.Errorf("failed to get quote: %w", err)
@@ -436,4 +442,3 @@ func (p *ProviderRune) buildMsgSendTransaction(
 
 	return txBytes, signDocBytes, nil
 }
-

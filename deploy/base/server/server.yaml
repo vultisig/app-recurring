@@ -98,6 +98,10 @@ spec:
               value: "json"
             - name: TASK_QUEUE_NAME
               value: "dca_plugin_queue"
+            - name: THORCHAINAFFILIATEID
+              value: "vultisig"
+            - name: THORCHAINAFFILIATEBPS
+              value: "0"
           resources:
             requests:
               memory: "32Mi"

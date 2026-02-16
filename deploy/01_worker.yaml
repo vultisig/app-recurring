@@ -146,6 +146,16 @@ spec:
                 configMapKeyRef:
                   name: thorchain
                   key: url
+            - name: THORCHAIN_AFFILIATEID
+              valueFrom:
+                configMapKeyRef:
+                  name: thorchain
+                  key: affiliate-id
+            - name: THORCHAIN_AFFILIATEBPS
+              valueFrom:
+                configMapKeyRef:
+                  name: thorchain
+                  key: affiliate-bps
             - name: BTC_BLOCKCHAIRURL
               valueFrom:
                 configMapKeyRef:

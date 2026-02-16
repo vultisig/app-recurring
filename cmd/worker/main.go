@@ -238,7 +238,7 @@ func main() {
 			c.rpcURL,
 			[]evm.Provider{
 				oneinch.NewProvider(oneInchClient, evmRpc, evmSdk),
-				thorchain.NewProviderEvm(thorchainClient, evmRpc, evmSdk, chainRpcMap),
+				thorchain.NewProviderEvm(thorchainClient, evmRpc, evmSdk, chainRpcMap, cfg.ThorChain.AffiliateID, cfg.ThorChain.AffiliateBps),
 				mayachain.NewProviderEvm(mayachainEvmClient, evmRpc, evmSdk, chainRpcMap),
 			},
 			signerSend,
@@ -251,7 +251,7 @@ func main() {
 		networks[c.chain] = network
 	}
 
-	thorchainBtc := thorchain.NewProviderBtc(thorchainClient)
+	thorchainBtc := thorchain.NewProviderBtc(thorchainClient, cfg.ThorChain.AffiliateID, cfg.ThorChain.AffiliateBps)
 	blockchairBtcClient := blockchair.NewClient(cfg.BTC.BlockchairURL)
 
 	// Initialize Blockchair clients for other UTXO chains
@@ -262,7 +262,7 @@ func main() {
 
 	// Initialize XRP network
 	xrpClient := xrp.NewClient(cfg.Rpc.XRP.URL)
-	thorchainXrp := thorchain.NewProviderXrp(thorchainClient, xrpClient)
+	thorchainXrp := thorchain.NewProviderXrp(thorchainClient, xrpClient, cfg.ThorChain.AffiliateID, cfg.ThorChain.AffiliateBps)
 
 	// Initialize XRP SDK for signing and broadcasting
 	xrpRpcClient := xrplsdk.NewHTTPRPCClient([]string{cfg.Rpc.XRP.URL})
@@ -313,9 +313,9 @@ func main() {
 	}
 
 	// Initialize chain-specific THORChain providers for UTXO chains
-	thorchainLtc := thorchain.NewProviderLtc(thorchainClient)
-	thorchainDoge := thorchain.NewProviderDoge(thorchainClient)
-	thorchainBch := thorchain.NewProviderBch(thorchainClient)
+	thorchainLtc := thorchain.NewProviderLtc(thorchainClient, cfg.ThorChain.AffiliateID, cfg.ThorChain.AffiliateBps)
+	thorchainDoge := thorchain.NewProviderDoge(thorchainClient, cfg.ThorChain.AffiliateID, cfg.ThorChain.AffiliateBps)
+	thorchainBch := thorchain.NewProviderBch(thorchainClient, cfg.ThorChain.AffiliateID, cfg.ThorChain.AffiliateBps)
 
 	// Initialize LTC network with chain-specific provider
 	ltcNetwork := utxo.NewNetwork(
@@ -367,7 +367,7 @@ func main() {
 	cosmosSDK := cosmossdk.NewSDK(cosmosRpcClient)
 
 	// Initialize Cosmos swap provider with THORChain
-	cosmosThorchainProvider := thorchain.NewProviderCosmos(thorchainClient)
+	cosmosThorchainProvider := thorchain.NewProviderCosmos(thorchainClient, cfg.ThorChain.AffiliateID, cfg.ThorChain.AffiliateBps)
 
 	cosmosNetwork := cosmos.NewNetwork(
 		cosmos.NewSwapService([]cosmos.SwapProvider{cosmosThorchainProvider}),
@@ -398,7 +398,7 @@ func main() {
 	thorchaintypes.RegisterInterfaces(runeSDK.InterfaceRegistry())
 	runeSDK.RefreshCodec()
 
-	runeProvider := thorchain.NewProviderRune(thorchainClient, mayachainClient)
+	runeProvider := thorchain.NewProviderRune(thorchainClient, mayachainClient, cfg.ThorChain.AffiliateID, cfg.ThorChain.AffiliateBps)
 
 	runeNetwork := rune.NewNetwork(
 		rune.NewSwapService([]rune.SwapProvider{runeProvider}),
@@ -415,7 +415,7 @@ func main() {
 
 	// Initialize TRON swap provider with THORChain (supports TRX and USDT TRC-20)
 	tronTxBuilder := thorchain.NewTronSDKTxBuilder(tronClient, tronClient)
-	tronThorchainProvider := thorchain.NewProviderTron(thorchainClient, tronTxBuilder)
+	tronThorchainProvider := thorchain.NewProviderTron(thorchainClient, tronTxBuilder, cfg.ThorChain.AffiliateID, cfg.ThorChain.AffiliateBps)
 
 	tronNetwork := tron.NewNetwork(
 		tron.NewSwapService([]tron.SwapProvider{tronThorchainProvider}),
@@ -499,7 +499,9 @@ type oneInchConfig struct {
 }
 
 type thorChainConfig struct {
-	URL string
+	URL          string
+	AffiliateID  string `mapstructure:"affiliate_id"`
+	AffiliateBps string `mapstructure:"affiliate_bps"`
 }
 
 type mayaChainConfig struct {
