@@ -17,13 +17,17 @@ import (
 
 // ProviderLtc implements FeeProvider and SwapProvider for Litecoin via THORChain.
 type ProviderLtc struct {
-	client *Client
+	client       *Client
+	affiliateID  string
+	affiliateBps string
 }
 
 // NewProviderLtc creates a new Litecoin provider for THORChain swaps.
-func NewProviderLtc(client *Client) *ProviderLtc {
+func NewProviderLtc(client *Client, affiliateID, affiliateBps string) *ProviderLtc {
 	return &ProviderLtc{
-		client: client,
+		client:       client,
+		affiliateID:  affiliateID,
+		affiliateBps: affiliateBps,
 	}
 }
 
@@ -86,6 +90,8 @@ func (p *ProviderLtc) MakeOutputs(
 		Destination:       to.Address,
 		StreamingInterval: defaultStreamingInterval,
 		StreamingQuantity: defaultStreamingQuantity,
+		Affiliate:         p.affiliateID,
+		AffiliateBps:      p.affiliateBps,
 	})
 	if err != nil {
 		return 0, nil, fmt.Errorf("[LTC] failed to get quote: %w", err)
@@ -175,4 +181,3 @@ func ltcPayToAddrScript(addr ltcutil.Address) ([]byte, error) {
 		return txscript.PayToAddrScript(btcAddr)
 	}
 }
-

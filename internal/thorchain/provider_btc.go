@@ -15,12 +15,16 @@ import (
 )
 
 type ProviderBtc struct {
-	client *Client
+	client       *Client
+	affiliateID  string
+	affiliateBps string
 }
 
-func NewProviderBtc(client *Client) *ProviderBtc {
+func NewProviderBtc(client *Client, affiliateID, affiliateBps string) *ProviderBtc {
 	return &ProviderBtc{
-		client: client,
+		client:       client,
+		affiliateID:  affiliateID,
+		affiliateBps: affiliateBps,
 	}
 }
 
@@ -95,6 +99,8 @@ func (p *ProviderBtc) MakeOutputs(
 		Destination:       to.Address,
 		StreamingInterval: defaultStreamingInterval,
 		StreamingQuantity: defaultStreamingQuantity,
+		Affiliate:         p.affiliateID,
+		AffiliateBps:      p.affiliateBps,
 		//ToleranceBps:      defaultToleranceBps,
 	})
 	if err != nil {

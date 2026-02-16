@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	xrpgo "github.com/xyield/xrpl-go/binary-codec"
 	xrp_swap "github.com/vultisig/app-recurring/internal/xrp"
 	"github.com/vultisig/vultisig-go/common"
+	xrpgo "github.com/xyield/xrpl-go/binary-codec"
 )
 
 type ProviderXrp struct {
@@ -18,15 +18,19 @@ type ProviderXrp struct {
 		GetCurrentLedger(ctx context.Context) (uint32, error)
 		GetBaseFee(ctx context.Context) (uint64, error)
 	}
+	affiliateID  string
+	affiliateBps string
 }
 
 func NewProviderXrp(client *Client, xrpClient interface {
 	GetCurrentLedger(ctx context.Context) (uint32, error)
 	GetBaseFee(ctx context.Context) (uint64, error)
-}) *ProviderXrp {
+}, affiliateID, affiliateBps string) *ProviderXrp {
 	return &ProviderXrp{
-		client:    client,
-		xrpClient: xrpClient,
+		client:       client,
+		xrpClient:    xrpClient,
+		affiliateID:  affiliateID,
+		affiliateBps: affiliateBps,
 	}
 }
 
@@ -146,6 +150,8 @@ func (p *ProviderXrp) MakeTransaction(
 		Destination:       to.Address,
 		StreamingInterval: defaultStreamingInterval,
 		StreamingQuantity: defaultStreamingQuantity,
+		Affiliate:         p.affiliateID,
+		AffiliateBps:      p.affiliateBps,
 		//ToleranceBps:      defaultToleranceBps,
 	})
 	if err != nil {
@@ -163,16 +169,16 @@ func (p *ProviderXrp) MakeTransaction(
 	if err != nil {
 		return nil, 0, fmt.Errorf("[XRP] failed to get current ledger: %w", err)
 	}
-	
+
 	baseFee, err := p.xrpClient.GetBaseFee(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("[XRP] failed to get base fee: %w", err)
 	}
 
 	// Calculate dynamic values
-	sequence := from.Sequence                  // Already fetched by Network.Swap
-	feeDrops := baseFee + 3                    // Add buffer for memo transaction
-	lastLedgerSeq := currentLedger + 100       // 100 ledger buffer (~5 minutes)
+	sequence := from.Sequence            // Already fetched by Network.Swap
+	feeDrops := baseFee + 3              // Add buffer for memo transaction
+	lastLedgerSeq := currentLedger + 100 // 100 ledger buffer (~5 minutes)
 
 	// Build THORChain memo (use quote memo if available, otherwise construct)
 	var thorMemo string
