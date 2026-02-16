@@ -160,18 +160,16 @@ func main() {
 }
 
 type config struct {
-	Mode                  string `envconfig:"MODE" required:"true"`
-	LogFormat             logging.LogFormat
-	Server                server.Config
-	TaskQueueName         string `envconfig:"TASK_QUEUE_NAME" default:"default_queue"`
-	BlockStorage          vault_config.BlockStorage
-	Postgres              plugin_config.Database
-	Redis                 plugin_config.Redis
-	Metrics               metrics.Config
-	Verifier              plugin_config.Verifier
-	Rpc                   rpcConfig
-	ThorChainAffiliateID  string `envconfig:"THORCHAIN_AFFILIATE_ID" default:"vultisig"`
-	ThorChainAffiliateBps string `envconfig:"THORCHAIN_AFFILIATE_BPS" default:"0"`
+	Mode          string `envconfig:"MODE" required:"true"`
+	LogFormat     logging.LogFormat
+	Server        server.Config
+	TaskQueueName string `envconfig:"TASK_QUEUE_NAME" default:"default_queue"`
+	BlockStorage  vault_config.BlockStorage
+	Postgres      plugin_config.Database
+	Redis         plugin_config.Redis
+	Metrics       metrics.Config
+	Verifier      plugin_config.Verifier
+	Rpc           rpcConfig
 }
 
 type rpcConfig struct {
