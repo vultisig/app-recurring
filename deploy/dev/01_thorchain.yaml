@@ -4,5 +4,5 @@ metadata:
   name: thorchain
 data:
   url: "https://thornode.ninerealms.com"
-  affiliate-id: "vultisig"
+  affiliate-id: "vult"
   affiliate-bps: "0"
