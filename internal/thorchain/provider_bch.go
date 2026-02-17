@@ -16,13 +16,17 @@ import (
 
 // ProviderBch implements FeeProvider and SwapProvider for Bitcoin Cash via THORChain.
 type ProviderBch struct {
-	client *Client
+	client       *Client
+	affiliateID  string
+	affiliateBps string
 }
 
 // NewProviderBch creates a new Bitcoin Cash provider for THORChain swaps.
-func NewProviderBch(client *Client) *ProviderBch {
+func NewProviderBch(client *Client, affiliateID, affiliateBps string) *ProviderBch {
 	return &ProviderBch{
-		client: client,
+		client:       client,
+		affiliateID:  affiliateID,
+		affiliateBps: affiliateBps,
 	}
 }
 
@@ -85,6 +89,8 @@ func (p *ProviderBch) MakeOutputs(
 		Destination:       to.Address,
 		StreamingInterval: defaultStreamingInterval,
 		StreamingQuantity: defaultStreamingQuantity,
+		Affiliate:         p.affiliateID,
+		AffiliateBps:      p.affiliateBps,
 	})
 	if err != nil {
 		return 0, nil, fmt.Errorf("[BCH] failed to get quote: %w", err)
@@ -162,4 +168,3 @@ func bchPayToAddrScript(addr bchutil.Address) ([]byte, error) {
 		return nil, fmt.Errorf("unsupported BCH address type: %T", addr)
 	}
 }
-

@@ -11,7 +11,7 @@ import (
 
 func TestProviderRune_MakeTransaction_RUNEtoETH(t *testing.T) {
 	thorClient := NewClient("https://thornode.ninerealms.com")
-	provider := NewProviderRune(thorClient, nil)
+	provider := NewProviderRune(thorClient, nil, "t", "0")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -54,7 +54,7 @@ func TestProviderRune_MakeTransaction_RUNEtoETH(t *testing.T) {
 
 func TestProviderRune_MakeTransaction_RUNEtoBTC(t *testing.T) {
 	thorClient := NewClient("https://thornode.ninerealms.com")
-	provider := NewProviderRune(thorClient, nil)
+	provider := NewProviderRune(thorClient, nil, "t", "0")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

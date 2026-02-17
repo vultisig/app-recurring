@@ -29,15 +29,19 @@ type TronTxBuilder interface {
 
 // ProviderTron implements the tron.SwapProvider interface for THORChain swaps
 type ProviderTron struct {
-	client    *Client
-	txBuilder TronTxBuilder
+	client       *Client
+	txBuilder    TronTxBuilder
+	affiliateID  string
+	affiliateBps string
 }
 
 // NewProviderTron creates a new THORChain provider for TRON swaps
-func NewProviderTron(client *Client, txBuilder TronTxBuilder) *ProviderTron {
+func NewProviderTron(client *Client, txBuilder TronTxBuilder, affiliateID, affiliateBps string) *ProviderTron {
 	return &ProviderTron{
-		client:    client,
-		txBuilder: txBuilder,
+		client:       client,
+		txBuilder:    txBuilder,
+		affiliateID:  affiliateID,
+		affiliateBps: affiliateBps,
 	}
 }
 
@@ -95,6 +99,8 @@ func (p *ProviderTron) MakeTransaction(
 		StreamingInterval: defaultStreamingInterval,
 		StreamingQuantity: defaultStreamingQuantity,
 		ToleranceBps:      defaultToleranceBps,
+		Affiliate:         p.affiliateID,
+		AffiliateBps:      p.affiliateBps,
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("[TRON] failed to get quote: %w", err)

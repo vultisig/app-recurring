@@ -21,27 +21,31 @@ import (
 )
 
 const (
-	cosmosGasLimit   = uint64(200000)
-	cosmosFeeAmount  = "5000"
-	cosmosChainID    = "cosmoshub-4"
-	cosmosAtomDenom  = "uatom"
+	cosmosGasLimit  = uint64(200000)
+	cosmosFeeAmount = "5000"
+	cosmosChainID   = "cosmoshub-4"
+	cosmosAtomDenom = "uatom"
 )
 
 // ProviderCosmos implements the cosmos.SwapProvider interface for THORChain swaps
 type ProviderCosmos struct {
-	client *Client
-	cdc    codec.Codec
+	client       *Client
+	cdc          codec.Codec
+	affiliateID  string
+	affiliateBps string
 }
 
 // NewProviderCosmos creates a new THORChain provider for Cosmos swaps
-func NewProviderCosmos(client *Client) *ProviderCosmos {
+func NewProviderCosmos(client *Client, affiliateID, affiliateBps string) *ProviderCosmos {
 	ir := codectypes.NewInterfaceRegistry()
 	cryptocodec.RegisterInterfaces(ir)
 	banktypes.RegisterInterfaces(ir)
 
 	return &ProviderCosmos{
-		client: client,
-		cdc:    codec.NewProtoCodec(ir),
+		client:       client,
+		cdc:          codec.NewProtoCodec(ir),
+		affiliateID:  affiliateID,
+		affiliateBps: affiliateBps,
 	}
 }
 
@@ -92,6 +96,8 @@ func (p *ProviderCosmos) MakeTransaction(
 		StreamingInterval: defaultStreamingInterval,
 		StreamingQuantity: defaultStreamingQuantity,
 		ToleranceBps:      defaultToleranceBps,
+		Affiliate:         p.affiliateID,
+		AffiliateBps:      p.affiliateBps,
 	})
 	if err != nil {
 		return nil, nil, 0, fmt.Errorf("[COSMOS] failed to get quote: %w", err)
@@ -251,4 +257,3 @@ func (p *ProviderCosmos) buildSwapTransaction(
 
 	return txBytes, signBytes, nil
 }
-

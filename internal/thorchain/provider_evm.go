@@ -17,18 +17,22 @@ import (
 )
 
 type ProviderEvm struct {
-	client   *Client
-	rpc      *ethclient.Client
-	sdk      *evm.SDK
-	chainRpc map[string]*ethclient.Client // map of chain name -> RPC client for cross-chain decimals lookup
+	client       *Client
+	rpc          *ethclient.Client
+	sdk          *evm.SDK
+	chainRpc     map[string]*ethclient.Client // map of chain name -> RPC client for cross-chain decimals lookup
+	affiliateID  string
+	affiliateBps string
 }
 
-func NewProviderEvm(client *Client, rpc *ethclient.Client, sdk *evm.SDK, chainRpc map[string]*ethclient.Client) *ProviderEvm {
+func NewProviderEvm(client *Client, rpc *ethclient.Client, sdk *evm.SDK, chainRpc map[string]*ethclient.Client, affiliateID, affiliateBps string) *ProviderEvm {
 	return &ProviderEvm{
-		client:   client,
-		rpc:      rpc,
-		sdk:      sdk,
-		chainRpc: chainRpc,
+		client:       client,
+		rpc:          rpc,
+		sdk:          sdk,
+		chainRpc:     chainRpc,
+		affiliateID:  affiliateID,
+		affiliateBps: affiliateBps,
 	}
 }
 
@@ -148,6 +152,8 @@ func (p *ProviderEvm) resolveQuote(
 		StreamingInterval: defaultStreamingInterval,
 		StreamingQuantity: defaultStreamingQuantity,
 		ToleranceBps:      defaultToleranceBps,
+		Affiliate:         p.affiliateID,
+		AffiliateBps:      p.affiliateBps,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get quote: %w", err)
