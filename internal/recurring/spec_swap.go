@@ -12,6 +12,7 @@ import (
 	"github.com/vultisig/app-recurring/internal/util"
 	rjsonschema "github.com/vultisig/recipes/jsonschema"
 	solanasdk "github.com/vultisig/recipes/sdk/solana"
+	"github.com/vultisig/recipes/sdk/swap"
 	rtypes "github.com/vultisig/recipes/types"
 	"github.com/vultisig/verifier/plugin"
 	"github.com/vultisig/verifier/plugin/tx_indexer/pkg/conv"
@@ -25,6 +26,7 @@ type SwapSpec struct {
 	solanaSDK  *solanasdk.SDK
 	thorClient *thorchain.Client
 	mayaClient *mayachain.Client
+	swapSvc    *swap.Service
 }
 
 func NewSwapSpec(
@@ -36,6 +38,7 @@ func NewSwapSpec(
 		solanaSDK:  solanaSDK,
 		thorClient: thorClient,
 		mayaClient: mayaClient,
+		swapSvc:    swap.NewService(),
 	}
 }
 
