@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
+	sdk "github.com/vultisig/recipes/sdk"
 	"github.com/vultisig/recipes/sdk/swap"
 )
 
@@ -37,13 +39,16 @@ type BuildTxResponse struct {
 }
 
 type TxDataJSON struct {
-	To       string `json:"to"`
-	Value    string `json:"value"`
-	Data     string `json:"data"`
-	Memo     string `json:"memo,omitempty"`
-	Nonce    uint64 `json:"nonce"`
-	GasLimit uint64 `json:"gas_limit"`
-	ChainID  string `json:"chain_id,omitempty"`
+	To          string `json:"to"`
+	Value       string `json:"value"`
+	Data        string `json:"data"`
+	Memo        string `json:"memo,omitempty"`
+	Nonce       uint64 `json:"nonce"`
+	GasLimit    uint64 `json:"gas_limit"`
+	ChainID     string `json:"chain_id,omitempty"`
+	UnsignedTx  string `json:"unsigned_tx,omitempty"`
+	SigningHash string `json:"signing_hash,omitempty"`
+	MsgHash     string `json:"msg_hash,omitempty"`
 }
 
 func (s *SwapSpec) HandleBuildTx(ctx context.Context, body []byte) (any, error) {
@@ -118,14 +123,62 @@ func (s *SwapSpec) HandleBuildTx(ctx context.Context, body []byte) (any, error) 
 		Memo:           bundle.Memo,
 	}
 
-	if bundle.ApprovalTx != nil {
+	evmSDK, evmErr := getEVMSDK(req.FromChain)
+	isEVM := evmErr == nil && swap.IsEVMChain(req.FromChain)
+
+	if bundle.ApprovalTx != nil && isEVM {
+		from := common.HexToAddress(req.Sender)
+		to := common.HexToAddress(bundle.ApprovalTx.To)
+		value := bundle.ApprovalTx.Value
+		if value == nil {
+			value = big.NewInt(0)
+		}
+		unsignedTx, err := evmSDK.MakeTx(ctx, from, to, value, bundle.ApprovalTx.Data, 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build approval tx: %w", err)
+		}
+		hashes, err := evmSDK.DeriveSigningHashes(unsignedTx, sdk.DeriveOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to derive approval signing hashes: %w", err)
+		}
+		resp.ApprovalTx = txDataToJSONWithSerialized(bundle.ApprovalTx, unsignedTx, hashes[0].Message, hashes[0].Hash)
+	} else if bundle.ApprovalTx != nil {
 		resp.ApprovalTx = txDataToJSON(bundle.ApprovalTx)
 	}
-	if bundle.SwapTx != nil {
+
+	if bundle.SwapTx != nil && isEVM {
+		from := common.HexToAddress(req.Sender)
+		to := common.HexToAddress(bundle.SwapTx.To)
+		value := bundle.SwapTx.Value
+		if value == nil {
+			value = big.NewInt(0)
+		}
+		var nonceOffset uint64
+		if bundle.ApprovalTx != nil {
+			nonceOffset = 1
+		}
+		unsignedTx, err := evmSDK.MakeTx(ctx, from, to, value, bundle.SwapTx.Data, nonceOffset)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build swap tx: %w", err)
+		}
+		hashes, err := evmSDK.DeriveSigningHashes(unsignedTx, sdk.DeriveOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to derive swap signing hashes: %w", err)
+		}
+		resp.SwapTx = txDataToJSONWithSerialized(bundle.SwapTx, unsignedTx, hashes[0].Message, hashes[0].Hash)
+	} else if bundle.SwapTx != nil {
 		resp.SwapTx = txDataToJSON(bundle.SwapTx)
 	}
 
 	return resp, nil
+}
+
+func txDataToJSONWithSerialized(td *swap.TxData, unsignedTx []byte, signingHash, msgHash []byte) *TxDataJSON {
+	result := txDataToJSON(td)
+	result.UnsignedTx = hex.EncodeToString(unsignedTx)
+	result.SigningHash = hex.EncodeToString(signingHash)
+	result.MsgHash = hex.EncodeToString(msgHash)
+	return result
 }
 
 func txDataToJSON(td *swap.TxData) *TxDataJSON {
