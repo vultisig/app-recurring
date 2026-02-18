@@ -150,6 +150,9 @@ func (s *SendSpec) createSendMetaRules(cfg map[string]any, chainTyped common.Cha
 	}
 
 	tokenStr := util.GetStr(assetMap, "token")
+	if util.IsNativeToken(tokenStr) {
+		tokenStr = ""
+	}
 
 	recipientsList, ok := cfg[recipients].([]any)
 	if !ok || len(recipientsList) == 0 {
